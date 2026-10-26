@@ -6,6 +6,7 @@
    - демо-режим без ключа, если API_TOKEN не задан
    ===================================================================== */
 const fs = require("fs");
+const zlib = require("zlib");
 const CONFIG = require("./config");
 const db = require("./db");
 
@@ -17,6 +18,95 @@ const MAX_PDF_BYTES = 12 * 1048576;  // один PDF
 const TEXT_EXT = /\.(txt|md|markdown|html?|css|scss|js|mjs|cjs|jsx|ts|tsx|json|jsonl|py|rb|go|rs|java|kt|c|h|cpp|hpp|cs|php|swift|sql|sh|bash|zsh|ps1|bat|ya?ml|toml|ini|cfg|conf|env|xml|svg|csv|tsv|log|vue|svelte|lua|r|dart|scala|tex|rst|gitignore|dockerfile)$/i;
 
 const isTextFile = f => (f.type || "").startsWith("text/") || /json|xml|javascript|yaml|csv/.test(f.type || "") || TEXT_EXT.test(f.name);
+const isZipFile = f => /zip/.test(f.type || "") || /\.zip$/i.test(f.name);
+
+// ---------- ZIP без зависимостей: центральный каталог + inflateRaw ----------
+const ZIP_MAX_ENTRIES = 2000;
+const ZIP_MAX_UNPACKED = 8 * 1048576; // один файл внутри архива
+const ZIP_MAX_IMAGES = 10;
+const ZIP_IMAGE_EXT = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp" };
+
+function readZip(buf) {
+  let eocd = -1;
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) {
+    if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("не похоже на ZIP-архив");
+  const count = buf.readUInt16LE(eocd + 10);
+  let p = buf.readUInt32LE(eocd + 16);
+  const entries = [];
+  for (let n = 0; n < count && n < ZIP_MAX_ENTRIES; n++) {
+    if (p + 46 > buf.length || buf.readUInt32LE(p) !== 0x02014b50) break;
+    const nameLen = buf.readUInt16LE(p + 28);
+    entries.push({
+      flags: buf.readUInt16LE(p + 8),
+      method: buf.readUInt16LE(p + 10),
+      compSize: buf.readUInt32LE(p + 20),
+      size: buf.readUInt32LE(p + 24),
+      offset: buf.readUInt32LE(p + 42),
+      name: buf.toString("utf8", p + 46, p + 46 + nameLen),
+    });
+    p += 46 + nameLen + buf.readUInt16LE(p + 30) + buf.readUInt16LE(p + 32);
+  }
+  return entries;
+}
+
+function unzipEntry(buf, e) {
+  if (e.flags & 1) throw new Error("зашифрован");
+  if (e.size === 0xffffffff || e.compSize === 0xffffffff) throw new Error("ZIP64 не поддерживается");
+  if (e.size > ZIP_MAX_UNPACKED) throw new Error("слишком большой");
+  const h = e.offset;
+  if (buf.readUInt32LE(h) !== 0x04034b50) throw new Error("повреждён");
+  const start = h + 30 + buf.readUInt16LE(h + 26) + buf.readUInt16LE(h + 28);
+  const data = buf.subarray(start, start + e.compSize);
+  if (e.method === 0) return data;
+  if (e.method === 8) return zlib.inflateRawSync(data, { maxOutputLength: ZIP_MAX_UNPACKED });
+  throw new Error("неизвестный способ сжатия");
+}
+
+function zipBlocks(meta, p, budget) {
+  let entries;
+  const buf = fs.readFileSync(p);
+  try { entries = readZip(buf); }
+  catch (e) { return [{ type: "text", text: `[Архив ${meta.name} не прочитан: ${e.message}]` }]; }
+
+  const files = entries.filter(e => !e.name.endsWith("/") && !/(^|\/)(__MACOSX|\.DS_Store)/.test(e.name));
+  const blocks = [];
+  const parts = [];
+  let charsLeft = CONFIG.MAX_TEXT_FILE_CHARS;
+  let images = 0;
+
+  for (const e of files) {
+    const ext = (e.name.split(".").pop() || "").toLowerCase();
+    const imgType = ZIP_IMAGE_EXT[ext];
+    const isText = !imgType && TEXT_EXT.test(e.name);
+    if (!imgType && !isText) continue;
+    try {
+      if (imgType) {
+        if (images >= ZIP_MAX_IMAGES || e.size > MAX_IMAGE_BYTES || budget.left < e.size) { e.skipped = true; continue; }
+        const data = unzipEntry(buf, e);
+        budget.left -= data.length;
+        images++;
+        blocks.push({ type: "text", text: `Изображение из архива: ${e.name}` });
+        blocks.push({ type: "image", source: { type: "base64", media_type: imgType, data: data.toString("base64") } });
+      } else {
+        if (charsLeft <= 0) { e.skipped = true; continue; }
+        let text = unzipEntry(buf, e).toString("utf8");
+        let cut = "";
+        if (text.length > charsLeft) { text = text.slice(0, charsLeft); cut = "\n[…файл обрезан]"; }
+        charsLeft -= text.length;
+        parts.push(`<file name="${e.name}">\n${text}${cut}\n</file>`);
+      }
+    } catch (err) {
+      e.skipped = err.message;
+    }
+  }
+
+  const list = files.map(e => `- ${e.name} (${(e.size / 1024).toFixed(1)} КБ)${e.skipped ? typeof e.skipped === "string" ? ` — не прочитан: ${e.skipped}` : " — не передан: превышен лимит" : ""}`);
+  const more = entries.length >= ZIP_MAX_ENTRIES ? `\n[показаны первые ${ZIP_MAX_ENTRIES} записей]` : "";
+  blocks.unshift({ type: "text", text: `<archive name="${meta.name}">\nСодержимое архива (${files.length} файлов):\n${list.join("\n")}${more}\n${parts.join("\n")}\n</archive>` });
+  return blocks;
+}
 
 // ---------- вложения → блоки контента ----------
 // budget — сколько байт вложений ещё можно отправить; расходуется по ходу сборки
@@ -45,6 +135,7 @@ function fileBlocks(fileId, budget) {
     if (text.length > CONFIG.MAX_TEXT_FILE_CHARS) { text = text.slice(0, CONFIG.MAX_TEXT_FILE_CHARS); cut = "\n[…файл обрезан]"; }
     return [{ type: "text", text: `<file name="${meta.name}">\n${text}${cut}\n</file>` }];
   }
+  if (isZipFile(meta)) return zipBlocks(meta, p, budget);
   return [{ type: "text", text: `[Прикреплён файл ${meta.name} (${meta.type || "неизвестный тип"}, ${mb.toFixed(2)} МБ). Его содержимое нельзя передать модели в этом формате.]` }];
 }
 

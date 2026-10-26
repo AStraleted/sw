@@ -25,6 +25,8 @@ const SECURITY_HEADERS = {
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
+    // Кадры из видео достаются в браузере через <video> с blob-ссылкой
+    "media-src 'self' blob:",
     "font-src 'self'",
     "connect-src 'self'",
     // Предпросмотр открывается через /api/preview/<id> в том же источнике, но в песочнице

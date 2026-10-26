@@ -211,12 +211,79 @@ async function prepareImage(file) {
   }
 }
 
+// Видео модель не принимает, поэтому отправляем кадры: равномерно по всей длине
+const VIDEO_FRAMES = 8;
+const FRAME_SIDE = 1024;
+const isVideo = f => (f.type || "").startsWith("video/") || /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(f.name);
+
+function waitEvent(el, name, ms = 15000) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => { cleanup(); reject(new Error("видео не отвечает")); }, ms);
+    const ok = () => { cleanup(); resolve(); };
+    const fail = () => { cleanup(); reject(new Error("браузер не может открыть это видео")); };
+    const cleanup = () => { clearTimeout(t); el.removeEventListener(name, ok); el.removeEventListener("error", fail); };
+    el.addEventListener(name, ok);
+    el.addEventListener("error", fail);
+  });
+}
+
+async function videoFrames(file) {
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  try {
+    const loaded = waitEvent(video, "loadeddata");
+    video.src = url;
+    await loaded;
+    const dur = video.duration;
+    if (!isFinite(dur) || dur <= 0 || !video.videoWidth) throw new Error("не удалось прочитать видео");
+
+    const count = Math.max(1, Math.min(VIDEO_FRAMES, Math.ceil(dur * 2)));
+    const scale = Math.min(1, FRAME_SIDE / Math.max(video.videoWidth, video.videoHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingQuality = "high";
+
+    const base = file.name.replace(/\.[^.]+$/, "");
+    const frames = [];
+    for (let i = 0; i < count; i++) {
+      const t = dur * (i + 0.5) / count;
+      const seeked = waitEvent(video, "seeked");
+      video.currentTime = t;
+      await seeked;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", IMAGE_QUALITY));
+      if (blob) frames.push(new File([blob], `${base} — кадр ${i + 1} из ${count}, ${t.toFixed(1)} с из ${dur.toFixed(1)} с.jpg`, { type: "image/jpeg" }));
+    }
+    return frames;
+  } finally {
+    video.removeAttribute("src");
+    video.load();
+    URL.revokeObjectURL(url);
+  }
+}
+
 export async function addFiles(files) {
   if (!can("files")) { toast("Файлы недоступны на вашем тарифе", { type: "error" }); return; }
   const maxMb = planFeatures().maxFileMb || state.config.maxFileMb || 10;
 
   for (const original of files) {
     if (pending.length >= 10) { toast("Не больше 10 файлов за раз", { type: "error" }); break; }
+    if (isVideo(original)) {
+      toast(`${original.name}: беру кадры из видео…`, { type: "info" });
+      try {
+        const frames = await videoFrames(original);
+        await addFiles(frames.slice(0, 10 - pending.length));
+        toast(`${original.name}: прикреплено кадров — ${frames.length}`);
+      } catch (err) {
+        toast(`${original.name}: ${err.message}`, { type: "error" });
+      }
+      continue;
+    }
     const isImage = (original.type || "").startsWith("image/");
 
     const entry = {
