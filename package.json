@@ -1,0 +1,12 @@
+{
+  "name": "squled-studio",
+  "version": "1.0.0",
+  "description": "SQULED Studio — рабочее пространство для работы с моделями Claude",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/index.js",
+    "setup": "node server/setup.js"
+  },
+  "engines": { "node": ">=18" }
+}

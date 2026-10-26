@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ffffff">
+<meta name="description" content="SQULED Studio — рабочее пространство для работы с моделями Claude">
+<title>SQULED Studio</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preload" href="assets/fonts/Inter-Regular.woff" as="font" type="font/woff" crossorigin>
+<link rel="preload" href="assets/fonts/Lora-Variable.woff" as="font" type="font/woff" crossorigin>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- Экран входа (заполняется из js/views/auth.js) -->
+<div id="auth" class="hidden"></div>
+
+<!-- Приложение -->
+<div id="app" class="hidden">
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+  <aside id="sidebar" aria-label="Навигация">
+    <div class="side-top">
+      <span id="brand"></span>
+      <button class="icon-btn" id="collapseBtn" title="Скрыть панель (Ctrl+\)" aria-label="Скрыть панель"></button>
+      <button class="icon-btn" id="newChatTop" title="Новый чат (Ctrl+Shift+O)" aria-label="Новый чат"></button>
+    </div>
+
+    <div class="side-search-wrap">
+      <button class="side-search" id="searchBtn" type="button">
+        <span data-i="search"></span><span class="s-label">Поиск</span><kbd>Ctrl K</kbd>
+      </button>
+    </div>
+
+    <nav class="side-nav">
+      <button class="nav-item" id="navNew" type="button"><span data-i="compose"></span>Новый чат</button>
+      <button class="nav-item" id="navSkills" type="button"><span data-i="puzzle"></span>Скиллы<span class="count" id="skillsCount"></span></button>
+      <button class="nav-item" id="navUsage" type="button"><span data-i="chart"></span>Использование</button>
+      <button class="nav-item" id="navPlans" type="button"><span data-i="coins"></span>Тарифы</button>
+      <button class="nav-item hidden" id="navAdmin" type="button"><span data-i="shield"></span>Администрирование</button>
+    </nav>
+
+    <div class="side-scroll" id="chatList"></div>
+
+    <div class="side-foot">
+      <button class="plan-chip" id="planChip" type="button" title="Тарифы"></button>
+      <div class="credit-card" id="creditCard" role="button" tabindex="0" title="Подробнее о расходе">
+        <div class="credit-row"><span>Кредиты</span><b id="creditValue">—</b></div>
+        <div class="credit-bar"><i id="creditBar" style="width:0"></i></div>
+      </div>
+      <button class="user-btn" id="userBtn" type="button" aria-haspopup="menu">
+        <span class="avatar" id="avatar"></span>
+        <span class="user-meta"><b id="userName"></b><span id="userLogin"></span></span>
+        <span data-i="chevDown" class="muted"></span>
+      </button>
+    </div>
+  </aside>
+
+  <main id="main">
+    <div class="topbar" id="topbar">
+      <button class="icon-btn mobile-only" id="mobileMenuBtn" aria-label="Меню"></button>
+      <button class="icon-btn collapsed-only" id="expandBtn" title="Показать панель (Ctrl+\)" aria-label="Показать панель"></button>
+      <button class="icon-btn collapsed-only" id="newChatCollapsed" title="Новый чат" aria-label="Новый чат"></button>
+      <div id="titleSlot"></div>
+      <div class="spacer"></div>
+      <button class="icon-btn mobile-only" id="newChatMobile" aria-label="Новый чат"></button>
+      <button class="icon-btn hidden" id="chatMenuBtn" title="Действия с чатом" aria-label="Действия с чатом"></button>
+    </div>
+
+    <div class="chat-area is-empty" id="chatArea">
+      <div id="scroller">
+        <div class="empty-hero hidden" id="hero"></div>
+        <div id="messages"></div>
+      </div>
+
+      <div class="composer-zone">
+        <div class="composer-col">
+          <button class="scroll-down" id="scrollDown" aria-label="Вниз"></button>
+          <div class="composer-shell" id="composerShell">
+            <div id="notice"></div>
+            <div class="composer" id="composer">
+              <div class="files" id="fileChips" hidden></div>
+              <textarea id="input" rows="1" placeholder="Спросите что-нибудь или прикрепите файл…" aria-label="Сообщение"></textarea>
+              <div class="composer-bar">
+                <button class="icon-btn" id="attachBtn" title="Прикрепить файлы" aria-label="Прикрепить файлы"></button>
+                <input type="file" id="fileInput" multiple hidden>
+                <button class="chip-btn accent hidden" id="skillsChip" type="button"></button>
+                <div class="spacer"></div>
+                <button class="chip-btn" id="effortBtn" type="button" aria-haspopup="menu"></button>
+                <button class="chip-btn" id="modelBtn" type="button" aria-haspopup="menu"></button>
+                <button class="send-btn" id="sendBtn" aria-label="Отправить" disabled></button>
+              </div>
+            </div>
+          </div>
+          <div class="composer-foot">Модели могут ошибаться. Проверяйте важное.</div>
+        </div>
+        <div class="quick-actions" id="quickActions"></div>
+      </div>
+      <div class="drop-overlay" id="dropOverlay"><div>Отпустите, чтобы прикрепить<span>Изображения, PDF, код и текстовые файлы</span></div></div>
+    </div>
+  </main>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
