@@ -37,7 +37,7 @@ function render(root, config, onSuccess, first = false) {
       </form>
       ${config.allowRegistration || !isLogin ? `<div class="auth-switch">${isLogin ? "Нет аккаунта?" : "Уже есть аккаунт?"} <button type="button" id="aSwitch">${isLogin ? "Зарегистрироваться" : "Войти"}</button></div>` : ""}
       <div class="auth-foot">${config.mock ? `<span class="badge accent">Демо-режим</span>` : ""}<span>SQULED Studio · ${new Date().getFullYear()}</span></div>
-      <nav class="legal-links"><a href="legal/privacy.html" target="_blank" rel="noopener">Конфиденциальность</a><a href="legal/terms.html" target="_blank" rel="noopener">Правила использования</a><a href="legal/contacts.html" target="_blank" rel="noopener">Контакты и о компании</a></nav>
+      <nav class="legal-links"><a href="legal/privacy.html" target="_blank" rel="noopener">Конфиденциальность</a><a href="legal/terms.html" target="_blank" rel="noopener">Правила использования</a><a href="legal/contacts.html" target="_blank" rel="noopener">О компании и контакты</a></nav>
     </div>`;
 
   const form = root.querySelector("form");
